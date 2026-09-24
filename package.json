@@ -1,0 +1,42 @@
+{
+  "name": "ritodo",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "vinext dev",
+    "build": "vinext build",
+    "deploy": "npm run build && wrangler deploy --config dist/server/wrangler.json",
+    "deploy:reminders": "wrangler deploy --config reminder-worker/wrangler.jsonc",
+    "test": "node --experimental-strip-types lib/access.test.mjs && node --experimental-strip-types lib/login.test.mjs && node --experimental-strip-types lib/model.test.mjs && node --experimental-strip-types lib/ledger.test.mjs && node --experimental-strip-types lib/timetable.test.mjs && node --experimental-strip-types lib/events.test.mjs && node --experimental-strip-types lib/calendar.test.mjs && node --experimental-strip-types lib/calendar-api.test.mjs && node --experimental-strip-types lib/reminders.test.mjs",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
+  },
+  "dependencies": {
+    "@block65/webcrypto-web-push": "2.0.0",
+    "lucide-react": "^1.31.0",
+    "next": "16.3.4",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "1.59.0",
+    "@cloudflare/workers-types": "5.20260924.1",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitejs/plugin-rsc": "0.5.34",
+    "eslint": "9.39.4",
+    "eslint-config-next": "16.3.4",
+    "react-server-dom-webpack": "19.3.0",
+    "typescript": "5.9.3",
+    "vinext": "1.0.0-beta.12",
+    "vite": "8.3.1",
+    "wrangler": "4.138.0"
+  },
+  "type": "module",
+  "license": "MIT"
+}

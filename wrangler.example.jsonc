@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ritodo",
+  "workers_dev": true,
+  "preview_urls": false,
+  "main": "vinext/server/fetch-handler",
+  "compatibility_date": "2026-09-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "ritodo-data",
+    "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+  }],
+  "services": [{ "binding": "REMINDERS", "service": "ritodo-reminders" }],
+  "vars": { "DEEPSEEK_MODEL": "deepseek-chat" }
+}
