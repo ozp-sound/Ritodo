@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowUp, Brain, CalendarDays, Check, Download, MessageCircle, Moon, Pencil, RotateCcw, Sun, Trash2, WalletCards, X } from "lucide-react";
-import { balances, money, type Memory, type State } from "@/lib/ledger";
+import { money, totalsFor, type Memory, type State } from "@/lib/ledger";
 import Calendar from "./calendar";
 
 export default function Home() {
@@ -12,7 +12,6 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [dark, setDark] = useState(false);
   const [view, setView] = useState<"chat" | "ledger" | "calendar" | "memory">("chat");
-  const [initials, setInitials] = useState<Record<string, string>>({});
   const [manual, setManual] = useState(false);
   const [kind, setKind] = useState("expense");
   const [editingMemory, setEditingMemory] = useState("");
@@ -69,17 +68,10 @@ export default function Home() {
     if (pending.current?.text !== text) pending.current = { text, id: crypto.randomUUID() };
     if (await mutate("/api/chat", pending.current)) { setInput(""); pending.current = null; }
   }
-  async function initialize(event: FormEvent) {
-    event.preventDefault();
-    const values = Object.fromEntries(Object.entries(initials).filter(([, value]) => value.trim() !== ""));
-    if (!Object.keys(values).length) { setError("至少填写一个账户余额，其余可以留空。"); return; }
-    if (await mutate("/api/ledger", { action: "balances", values, id: crypto.randomUUID() })) setInitials({});
-  }
   async function manualEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(event.currentTarget));
-    const entry = { ...data, ...(kind === "transfer" ? {} : { target: undefined }) };
-    if (await mutate("/api/ledger", { action: "entry", entry, id: crypto.randomUUID() })) setManual(false);
+    if (await mutate("/api/ledger", { action: "entry", entry: data, id: crypto.randomUUID() })) setManual(false);
   }
   function startMemoryEdit(memory: Memory) { setEditingMemory(memory.id); setMemoryDraft(memory.fact); setForgettingMemory(""); setMemoryNotice(""); }
   async function saveMemory(memory: Memory) {
@@ -97,13 +89,13 @@ export default function Home() {
   function exportCsv() {
     if (!state) return;
     const cell = (value: string) => '"' + (/^[=+\-@\t\r]/.test(value) ? "'" : "") + value.replaceAll('"', '""') + '"';
-    const rows = [["日期", "类型", "账户", "转入账户", "金额", "分类", "备注", "状态"], ...state.entries.map(e => [e.date, e.kind === "expense" ? "支出" : e.kind === "income" ? "收入" : "转账", e.account, e.target || "", money(e.cents), e.category, e.note, e.undoneAt ? "已撤销" : "有效"])];
+    const rows = [["日期", "类型", "金额", "分类", "备注", "状态"], ...state.entries.map(e => [e.date, e.kind === "expense" ? "支出" : e.kind === "income" ? "收入" : "旧转账", money(e.cents), e.category, e.note, e.undoneAt ? "已撤销" : "有效"])];
     const url = URL.createObjectURL(new Blob(["\ufeff" + rows.map(row => row.map(cell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a"); link.href = url; link.download = "Ritodo-账本.csv"; link.click(); URL.revokeObjectURL(url);
   }
-  const totals = state ? balances(state) : {};
-  const configured = state?.accounts.filter(a => a.initial !== null) || [];
   const entries = state?.entries || [];
+  const currentMonth = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" }).slice(0, 7);
+  const monthTotals = totalsFor(entries, currentMonth);
   return <main className={"jarvis-shell ritodo-live " + (dark ? "dark-mode" : "")}>
     <header className="topbar">
       <div className="brand">Ritodo</div>
@@ -140,22 +132,19 @@ export default function Home() {
             </article>)}
           </div>}
           <p className="memory-footnote">不会保存密码、API Key 或银行卡号</p>
-        </section> : <section className="live-ledger view-panel" aria-label="账户与账本">
-          <div className="ledger-heading"><div><p className="live-muted">总余额</p><h1>¥ {money(Object.values(totals).reduce<number>((sum, n) => sum + (n ?? 0), 0))}</h1></div><button className="secondary-button" onClick={exportCsv}><Download size={16} />导出</button></div>
-          <div className="live-accounts">{configured.map(a => <div key={a.name}><span>{a.name}</span><strong>¥ {money(totals[a.name]!)}</strong></div>)}</div>
-          <details className="balance-setup"><summary>余额</summary><form onSubmit={initialize}><div className="balance-fields">{state.accounts.map(a => <label key={a.name}>{a.name}<input aria-label={a.name + "当前余额"} inputMode="decimal" placeholder={totals[a.name] === null ? "未录入" : "¥" + money(totals[a.name]!)} value={initials[a.name] || ""} onChange={e => setInitials({ ...initials, [a.name]: e.target.value })} /></label>)}</div><button className="primary-button" disabled={busy}>保存</button></form></details>
-          <div className="ledger-heading"><h2>明细</h2>{configured.length > 0 && <button className="secondary-button" disabled={busy} onClick={() => setManual(!manual)}>{manual ? "收起" : "记一笔"}</button>}</div>
+        </section> : <section className="live-ledger view-panel" aria-label="收支账本">
+          <div className="ledger-heading"><div><p className="live-muted">{currentMonth.replace("-", " 年 ")} 月</p><h1>本月收支</h1></div><button className="secondary-button" onClick={exportCsv}><Download size={16} />导出</button></div>
+          <div className="month-summary"><div><span>收入</span><strong className="income">+ ¥ {money(monthTotals.income)}</strong></div><div><span>支出</span><strong className="expense">− ¥ {money(monthTotals.expense)}</strong></div></div>
+          <div className="ledger-heading"><h2>明细</h2><button className="secondary-button" disabled={busy} onClick={() => setManual(!manual)}>{manual ? "收起" : "记一笔"}</button></div>
           {manual && <form className="manual-form" onSubmit={manualEntry}>
-            <label>类型<select name="kind" value={kind} onChange={e => setKind(e.target.value)}><option value="expense">支出</option><option value="income">收入</option><option value="transfer">转账</option></select></label>
-            <label>账户<select name="account">{configured.map(a => <option key={a.name}>{a.name}</option>)}</select></label>
-            {kind === "transfer" && <label>转入账户<select name="target">{configured.map(a => <option key={a.name}>{a.name}</option>)}</select></label>}
+            <label>类型<select name="kind" value={kind} onChange={e => setKind(e.target.value)}><option value="expense">支出</option><option value="income">收入</option></select></label>
             <label>金额（元）<input name="amount" inputMode="decimal" required placeholder="0.00" /></label>
             <label>分类<input name="category" required defaultValue="其他" maxLength={30} /></label>
             <label>日期<input name="date" type="date" required defaultValue={new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Shanghai" })} /></label>
             <label>备注<input name="note" maxLength={300} /></label><button className="primary-button" disabled={busy}>保存</button>
           </form>}
           {!entries.length && <p className="live-muted">暂无记录</p>}
-          <div className="entry-list">{[...entries].reverse().map(e => <article className={e.undoneAt ? "entry undone" : "entry"} key={e.id}><div><strong>{e.note || e.category}</strong><p>{e.account}{e.target ? " → " + e.target : ""} · {e.category} · {e.date}</p>{e.undoneAt && <small>已撤销</small>}</div><div><strong>{e.kind === "income" ? "+" : e.kind === "expense" ? "−" : "↔"} ¥{money(e.cents)}</strong>{!e.undoneAt && <button disabled={busy} onClick={() => mutate("/api/ledger", { action: "undo", entryId: e.id, id: crypto.randomUUID() })}><RotateCcw size={14} />撤销</button>}</div></article>)}</div>
+          <div className="entry-list">{[...entries].reverse().map(e => <article className={e.undoneAt ? "entry undone" : "entry"} key={e.id}><div><strong>{e.note || e.category}</strong><p>{e.category} · {e.date}</p>{e.undoneAt && <small>已撤销</small>}</div><div><strong className={e.kind}>{e.kind === "income" ? "+" : e.kind === "expense" ? "−" : "↔"} ¥{money(e.cents)}</strong>{!e.undoneAt && <button disabled={busy} onClick={() => mutate("/api/ledger", { action: "undo", entryId: e.id, id: crypto.randomUUID() })}><RotateCcw size={14} />撤销</button>}</div></article>)}</div>
         </section>}
       </>}
     </div>
